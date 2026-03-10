@@ -5,6 +5,8 @@ Students should implement their own PacmanAgent and/or GhostAgent
 following this template.
 """
 
+from inspect import currentframe
+from re import X
 import sys
 from pathlib import Path
 
@@ -20,10 +22,10 @@ import random
 
 
 class PacmanAgent(BasePacmanAgent):
-    """
-    Example Pacman agent using a simple greedy strategy.
-    Students should implement their own search algorithms here.
-    """
+    def step ( self , map_state , my_pos , enemy_pos , step_number ) :
+
+
+            return Move . UP | Move . DOWN | Move . LEFT | Move . RIGHT | Move . STAY
     
     def __init__(self, **kwargs):
         """
@@ -38,23 +40,52 @@ class PacmanAgent(BasePacmanAgent):
              my_position: tuple, 
              enemy_position: tuple,
              step_number: int):
-        path = self.bfs(my_position, enemy_position, map_state)
+        """
+        Simple greedy strategy: move towards the ghost.
         
-        if path:
-            best_move = path[0]
-            desired_steps = 1
-            
-            # Kiểm tra xem có thể đi 2 bước trên cùng một đường thẳng không
-            if len(path) > 1 and path[0] == path[1]:
-                desired_steps = 2
-                
-            # Đảm bảo an toàn (không đâm vào tường)
-            steps = self._max_valid_steps(my_position, best_move, map_state, desired_steps)
-            
+        Students should implement better search algorithms like:
+        - BFS (Breadth-First Search)
+        - DFS (Depth-First Search)
+        - A* Search
+        - Greedy Best-First Search
+        - etc.
+        """
+        # Calculate direction to ghost
+        row_diff = enemy_position[0] - my_position[0]
+        col_diff = enemy_position[1] - my_position[1]
+        
+        # List of possible moves in order of preference
+        moves = []
+        
+        # Prioritize vertical movement if needed
+        if row_diff > 0:
+            moves.append(Move.DOWN)
+        elif row_diff < 0:
+            moves.append(Move.UP)
+        
+        # Prioritize horizontal movement if needed
+        if col_diff > 0:
+            moves.append(Move.RIGHT)
+        elif col_diff < 0:
+            moves.append(Move.LEFT)
+        
+        # Try each move in order
+        for move in moves:
+            desired_steps = self._desired_steps(move, row_diff, col_diff)
+            steps = self._max_valid_steps(my_position, move, map_state, desired_steps)
             if steps > 0:
-                return (best_move, steps)
-                
-        # Nếu không có đường đi (bị kẹt), đứng im
+                return (move, steps)
+        
+        # If no preferred move is valid, try any valid move
+        all_moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+        random.shuffle(all_moves)
+        
+        for move in all_moves:
+            steps = self._max_valid_steps(my_position, move, map_state, self.pacman_speed)
+            if steps > 0:
+                return (move, steps)
+        
+        # If no move is valid, stay
         return (Move.STAY, 1)
     
     def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
@@ -87,64 +118,133 @@ class PacmanAgent(BasePacmanAgent):
             return abs(col_diff)
         return 1
 
-    def _get_neighbors(self, pos: tuple, map_state: np.ndarray) -> list:
-        """Lấy danh sách các ô hợp lệ xung quanh vị trí hiện tại."""
-        neighbors = []
-        for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
-            delta_row, delta_col = move.value
-            next_pos = (pos[0] + delta_row, pos[1] + delta_col)
-            
-            if self._is_valid_position(next_pos, map_state):
-                neighbors.append((next_pos, move))
-        return neighbors
-
-    def bfs(self, start: tuple, goal: tuple, map_state: np.ndarray) -> list:
-        queue = [(start, [])]
-        visited = {start}
-        
-        while queue:
-            # Dùng pop(0) để lấy phần tử đầu tiên của list (hoạt động như queue)
-            current_pos, path = queue.pop(0)
-            
-            # Đã tìm thấy Ghost
-            if current_pos == goal:
-                return path
-                
-            # Khám phá các ô lân cận
-            for next_pos, move in self._get_neighbors(current_pos, map_state):
-                if next_pos not in visited:
-                    visited.add(next_pos)
-                    queue.append((next_pos, path + [move]))
-                    
-        return []
 
 class GhostAgent(BaseGhostAgent):
-    """
-    Example Ghost agent using a simple evasive strategy.
-    Students should implement their own search algorithms here.
-    """
+
+
     
-    def __init__(self, **kwargs):
-        """
-        Initialize the Ghost agent.
-        Students can set up any data structures they need here.
-        """
+   def __init__(self, **kwargs):
+        
         super().__init__(**kwargs)
         self.name = "Example Evasive Ghost"
+
     
-    def step(self, map_state: np.ndarray, 
+   def step(self, map_state: np.ndarray, 
              my_position: tuple, 
              enemy_position: tuple,
              step_number: int) -> Move:
-        """
-        Simple evasive strategy: move away from Pacman.
+
+        import random
+        x, y = my_position
+        height, width = map_state.shape 
+        best_direction = None
+        max_distance = -1
+
+
+        #ktra hướng có chạm tường ko     
+        move =[Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+        move = random.choice(move)
+
+        #ktra xem các hướng ngẫu nhiên có hướng nào chạm tường ko, nếu  không thì tính kcah vs pacman, chọn hướng xa nhất
+
+        if move == Move.UP:
+
+            new_x = x - 1
+            new_y = y
+
+            if new_x >= 0 and map_state[new_x][new_y] == 0:
+                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
+
+                if distance > max_distance:
+                    max_distance = distance
+                    best_direction = 4
+
+        elif move == Move.DOWN:
+
+            new_x = x+1
+            new_y = y
+
+            if new_x < height and map_state[new_x][new_y] == 0:
+                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
+
+                if distance > max_distance:
+                    max_distance=distance
+                    best_direction = 2
+
+        elif move == Move.LEFT:
+
+            new_x=x 
+            new_y=y-1
+
+            if new_y >= 0 and map_state[new_x][new_y] == 0:
+                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
+                if distance > max_distance:
+                    max_distance = distance
+                    best_direction = 3
+
+        elif move== Move.RIGHT:
+
+            new_x=x 
+            new_y=y+1
+
+            if new_y < width and map_state[new_x][new_y] == 0:
+                distance =abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
+                if distance > max_distance:
+                    max_distance = distance
+                    best_direction =1
+
         
-        Students should implement better search algorithms like:
-        - BFS to find furthest point
-        - A* to plan escape route
-        - Minimax for adversarial search
-        - etc.
-        """
+
+         #nếu ko có hướng nào hợp lệ sẽ đứng yên, còn có sẽ chọn đi hướng đó           
+        if best_direction == 1:
+            return (Move.RIGHT, 1)
+        elif best_direction == 2:
+            return (Move.DOWN, 1)
+        elif best_direction == 3:
+            return (Move.LEFT, 1)
+        elif best_direction == 4: 
+            return (Move.UP, 1)
+
+        from collections import deque
+
+
+
+    # BFS tìm vị trí xa nhất cho ghost so vs pacman
+   def BFS(self, start, pacman, map_state):
+
+        queue = deque([start])
+        visited = set([start])
+
+        best_pos = start
+        best_dist = abs(start[0] - pacman[0]) + abs(start[1] - pacman[1])
+
+        while queue:
+
+         current = queue.popleft()
+
+         # calculate distance between ghost and pacman
+         distance = abs(current[0] - pacman[0]) + abs(current[1] - pacman[1])
+
+        if distance > best_dist:
+              best_dist = distance
+              best_pos = current
+
+        # BFS explore map
+        for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+
+              delta_row, delta_col = move.value
+
+              new_pos = (current[0] + delta_row, current[1] + delta_col)
+
+              if self._is_valid_position(new_pos, map_state) and new_pos not in visited:
+
+                visited.add(new_pos)
+                queue.append(new_pos)
+
+        return best_pos
+               
+
+
         # Calculate direction away from Pacman
         row_diff = my_position[0] - enemy_position[0]
         col_diff = my_position[1] - enemy_position[1]
@@ -187,7 +287,7 @@ class GhostAgent(BaseGhostAgent):
         # If no move is valid, stay
         return Move.STAY
     
-    def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
+   def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
         """Check if a position is valid (not a wall and within bounds)."""
         row, col = pos
         height, width = map_state.shape
