@@ -38,52 +38,23 @@ class PacmanAgent(BasePacmanAgent):
              my_position: tuple, 
              enemy_position: tuple,
              step_number: int):
-        """
-        Simple greedy strategy: move towards the ghost.
+        path = self.bfs(my_position, enemy_position, map_state)
         
-        Students should implement better search algorithms like:
-        - BFS (Breadth-First Search)
-        - DFS (Depth-First Search)
-        - A* Search
-        - Greedy Best-First Search
-        - etc.
-        """
-        # Calculate direction to ghost
-        row_diff = enemy_position[0] - my_position[0]
-        col_diff = enemy_position[1] - my_position[1]
-        
-        # List of possible moves in order of preference
-        moves = []
-        
-        # Prioritize vertical movement if needed
-        if row_diff > 0:
-            moves.append(Move.DOWN)
-        elif row_diff < 0:
-            moves.append(Move.UP)
-        
-        # Prioritize horizontal movement if needed
-        if col_diff > 0:
-            moves.append(Move.RIGHT)
-        elif col_diff < 0:
-            moves.append(Move.LEFT)
-        
-        # Try each move in order
-        for move in moves:
-            desired_steps = self._desired_steps(move, row_diff, col_diff)
-            steps = self._max_valid_steps(my_position, move, map_state, desired_steps)
+        if path:
+            best_move = path[0]
+            desired_steps = 1
+            
+            # Kiểm tra xem có thể đi 2 bước trên cùng một đường thẳng không
+            if len(path) > 1 and path[0] == path[1]:
+                desired_steps = 2
+                
+            # Đảm bảo an toàn (không đâm vào tường)
+            steps = self._max_valid_steps(my_position, best_move, map_state, desired_steps)
+            
             if steps > 0:
-                return (move, steps)
-        
-        # If no preferred move is valid, try any valid move
-        all_moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
-        random.shuffle(all_moves)
-        
-        for move in all_moves:
-            steps = self._max_valid_steps(my_position, move, map_state, self.pacman_speed)
-            if steps > 0:
-                return (move, steps)
-        
-        # If no move is valid, stay
+                return (best_move, steps)
+                
+        # Nếu không có đường đi (bị kẹt), đứng im
         return (Move.STAY, 1)
     
     def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
@@ -116,6 +87,36 @@ class PacmanAgent(BasePacmanAgent):
             return abs(col_diff)
         return 1
 
+    def _get_neighbors(self, pos: tuple, map_state: np.ndarray) -> list:
+        """Lấy danh sách các ô hợp lệ xung quanh vị trí hiện tại."""
+        neighbors = []
+        for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+            delta_row, delta_col = move.value
+            next_pos = (pos[0] + delta_row, pos[1] + delta_col)
+            
+            if self._is_valid_position(next_pos, map_state):
+                neighbors.append((next_pos, move))
+        return neighbors
+
+    def bfs(self, start: tuple, goal: tuple, map_state: np.ndarray) -> list:
+        queue = [(start, [])]
+        visited = {start}
+        
+        while queue:
+            # Dùng pop(0) để lấy phần tử đầu tiên của list (hoạt động như queue)
+            current_pos, path = queue.pop(0)
+            
+            # Đã tìm thấy Ghost
+            if current_pos == goal:
+                return path
+                
+            # Khám phá các ô lân cận
+            for next_pos, move in self._get_neighbors(current_pos, map_state):
+                if next_pos not in visited:
+                    visited.add(next_pos)
+                    queue.append((next_pos, path + [move]))
+                    
+        return []
 
 class GhostAgent(BaseGhostAgent):
     """
