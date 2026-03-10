@@ -4,7 +4,7 @@ Example student submission showing the required interface.
 Students should implement their own PacmanAgent and/or GhostAgent
 following this template.
 """
-
+from collections import deque
 from inspect import currentframe
 from re import X
 import sys
