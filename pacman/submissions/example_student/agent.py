@@ -119,8 +119,7 @@ class PacmanAgent(BasePacmanAgent):
 class GhostAgent(BaseGhostAgent):
 
 
-    
-   def __init__(self, **kwargs):
+       def __init__(self, **kwargs):
         
         super().__init__(**kwargs)
         self.name = "Example Evasive Ghost"
@@ -130,12 +129,15 @@ class GhostAgent(BaseGhostAgent):
              my_position: tuple, 
              enemy_position: tuple,
              step_number: int) -> Move:
-
+             
         import random
+        # gọi bfs
+        self.BFS(my_position, enemy_position, map_state)
         x, y = my_position
         height, width = map_state.shape 
         best_direction = None
         max_distance = -1
+
 
 
         #ktra hướng có chạm tường ko     
@@ -193,60 +195,64 @@ class GhostAgent(BaseGhostAgent):
         
 
          #nếu ko có hướng nào hợp lệ sẽ đứng yên, còn có sẽ chọn đi hướng đó           
+        #nếu ko có hướng nào hợp lệ sẽ đứng yên, còn có sẽ chọn đi hướng đó           
         if best_direction == 1:
-            return (Move.RIGHT, 1)
+          return Move.RIGHT
         elif best_direction == 2:
-            return (Move.DOWN, 1)
+          return Move.DOWN
         elif best_direction == 3:
-            return (Move.LEFT, 1)
+          return Move.LEFT
         elif best_direction == 4: 
-            return (Move.UP, 1)
+           return Move.UP
 
-        from collections import deque
+# fallback nếu không có hướng hợp lệ
+        return Move.STAY
+
+       
 
 
 
     # BFS tìm vị trí xa nhất cho ghost so vs pacman
-   def BFS(self, start, pacman, map_state):
+   def BFS(self, my_position, enemy_position, map_state):
 
-        queue = deque([start])
-        visited = set([start])
+        queue = deque([my_position])
+        visited = set([my_position])
 
-        best_pos = start
-        best_dist = abs(start[0] - pacman[0]) + abs(start[1] - pacman[1])
+        best_pos = my_position
+        best_dist = abs(my_position[0] - enemy_position[0]) + abs(my_position[1] - enemy_position[1])
 
         while queue:
 
-         current = queue.popleft()
+            current = queue.popleft()
 
-         # calculate distance between ghost and pacman
-         distance = abs(current[0] - pacman[0]) + abs(current[1] - pacman[1])
+            distance = abs(current[0] - enemy_position[0]) + abs(current[1] - enemy_position[1])
 
-        if distance > best_dist:
-              best_dist = distance
-              best_pos = current
+            if distance > best_dist:
+               best_dist = distance
+               best_pos = current
 
-        # BFS explore map
-        for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+    # BFS explore map
+            for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
 
-              delta_row, delta_col = move.value
+               delta_row, delta_col = move.value
+               new_pos = (current[0] + delta_row, current[1] + delta_col)
 
-              new_pos = (current[0] + delta_row, current[1] + delta_col)
+               if self._is_valid_position(new_pos, map_state) and new_pos not in visited:
 
-              if self._is_valid_position(new_pos, map_state) and new_pos not in visited:
+                 visited.add(new_pos)
+                 queue.append(new_pos)
+               
 
-                visited.add(new_pos)
-                queue.append(new_pos)
 
         return best_pos
-               
+
 
 
         # Calculate direction away from Pacman
         row_diff = my_position[0] - enemy_position[0]
         col_diff = my_position[1] - enemy_position[1]
         
-        # List of possible moves in order of preference
+        # List of posible moves in order of preference
         moves = []
         
         # Prioritize vertical movement away from Pacman
