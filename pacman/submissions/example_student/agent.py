@@ -21,6 +21,7 @@ from environment import Move
 import numpy as np
 
 
+import pacmanAlgorithm
 
 class PacmanAgent(BasePacmanAgent):
     def __init__(self, **kwargs):
@@ -29,31 +30,48 @@ class PacmanAgent(BasePacmanAgent):
         Students can set up any data structures they need here.
         """
         super().__init__(**kwargs)
-        self.name = "BFS Pacman"
+        self.name = "Choose Search Pacman"
         self.pacman_speed = max(1, int(kwargs.get("pacman_speed", 1)))
+        
+        #Chọn thuật toán sẽ sử dụng: BFS, A* hoặc DFS (DFS không nên áp dụng cho PACMAN)
+        self.algorithm = "A*"
     
     def step(self, map_state: np.ndarray, 
              my_position: tuple, 
              enemy_position: tuple,
              step_number: int):
-        path = self.bfs(my_position, enemy_position, map_state)
+        
+        # Gọi thuật toán dựa trên lựa chọn
+        if self.algorithm == "BFS":
+            path = pacmanAlgorithm.bfs(my_position, enemy_position, map_state)
+        elif self.algorithm == "DFS":
+            path = pacmanAlgorithm.dfs(my_position, enemy_position, map_state)
+        elif self.algorithm == "A*":
+            path = pacmanAlgorithm.astar(my_position, enemy_position, map_state)
+        else:
+            path = []
         
         if path:
             best_move = path[0]
             desired_steps = 1
             
-            # Kiểm tra xem có thể đi 2 bước trên cùng một đường thẳng không
-            if len(path) > 1 and path[0] == path[1]:
-                desired_steps = 2
+            # Đếm số bước liên tiếp trên cùng một hướng
+            for i in range(1, len(path)):
+                if path[i] == best_move:
+                    desired_steps += 1
+                else:
+                    break
+                    
+            # Tuyệt chiêu phóng lố (Lunge) đón đầu Ghost
+            if desired_steps == len(path) and desired_steps < self.pacman_speed:
+                desired_steps = self.pacman_speed
                 
-            # Đảm bảo an toàn (không đâm vào tường)
             steps = self._max_valid_steps(my_position, best_move, map_state, desired_steps)
-            
             if steps > 0:
                 return (best_move, steps)
                 
-        # Nếu không có đường đi (bị kẹt), đứng im
         return (Move.STAY, 1)
+
     
     def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
         """Check if a position is valid (not a wall and within bounds)."""
@@ -85,36 +103,6 @@ class PacmanAgent(BasePacmanAgent):
             return abs(col_diff)
         return 1
 
-    def _get_neighbors(self, pos: tuple, map_state: np.ndarray) -> list:
-        """Lấy danh sách các ô hợp lệ xung quanh vị trí hiện tại."""
-        neighbors = []
-        for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
-            delta_row, delta_col = move.value
-            next_pos = (pos[0] + delta_row, pos[1] + delta_col)
-            
-            if self._is_valid_position(next_pos, map_state):
-                neighbors.append((next_pos, move))
-        return neighbors
-
-    def bfs(self, start: tuple, goal: tuple, map_state: np.ndarray) -> list:
-        queue = [(start, [])]
-        visited = {start}
-        
-        while queue:
-            # Dùng pop(0) để lấy phần tử đầu tiên của list (hoạt động như queue)
-            current_pos, path = queue.pop(0)
-            
-            # Đã tìm thấy Ghost
-            if current_pos == goal:
-                return path
-                
-            # Khám phá các ô lân cận
-            for next_pos, move in self._get_neighbors(current_pos, map_state):
-                if next_pos not in visited:
-                    visited.add(next_pos)
-                    queue.append((next_pos, path + [move]))
-                    
-        return []
 
 
 class GhostAgent(BaseGhostAgent):
