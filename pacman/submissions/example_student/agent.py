@@ -1,3 +1,4 @@
+
 """
 Example student submission showing the required interface.
 
@@ -9,7 +10,7 @@ from inspect import currentframe
 from re import X
 import sys
 from pathlib import Path
-import random
+
 # Add src to path to import the interface
 src_path = Path(__file__).parent.parent.parent / "src"
 sys.path.insert(0, str(src_path))
@@ -136,28 +137,30 @@ class GhostAgent(BaseGhostAgent):
         x, y = my_position
         height, width = map_state.shape 
         best_direction = None
-        best_distance = float("inf")
+        max_distance = -1
 
 
 
         #ktra hướng có chạm tường ko     
-        moves =[Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+        move =[Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
 
-        for move in moves:
+        for move in move:
             delta_row, delta_col = move.value
             new_x=x+ delta_row
             new_y=y+delta_col
             if 0 <= new_x< height and 0<= new_y <width and map_state[new_x][new_y]==0:
                 distance = abs(new_x - enemy_position[0])+ abs(new_y - enemy_position[1])
 
-                distance = abs(target[0] - new_x) + abs(target[1] - new_y)
-                if distance < best_distance:
-                    best_distance=distance
+                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
+                if distance>max_distance:
+                    max_distance=distance
                     best_direction=move
 
-        #nếu bfs ko chạy được thì sẽ chọn hướng đi xa pacman nhất
+        
         if best_direction:
          return best_direction
+
+        return Move.STAY
 
 
 
@@ -211,7 +214,7 @@ class GhostAgent(BaseGhostAgent):
         if row < 0 or row >= height or col < 0 or col >= width:
             return False
         
-        return map_state[row, col] == 0              
+        return map_state[row, col] == 0               
 
     # BFS tìm vị trí xa nhất cho ghost so vs pacman
    def BFS(self, my_position, enemy_position, map_state):
