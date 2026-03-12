@@ -152,7 +152,7 @@ class GhostAgent(BaseGhostAgent):
 
                 distance = abs(target[0] - new_x) + abs(target[1] - new_y)
                 if distance < best_distance:
-                    max_distance=distance
+                    best_distance=distance
                     best_direction=move
 
         #nếu bfs ko chạy được thì sẽ chọn hướng đi xa pacman nhất
