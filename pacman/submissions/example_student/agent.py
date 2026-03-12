@@ -9,7 +9,7 @@ from inspect import currentframe
 from re import X
 import sys
 from pathlib import Path
-
+import random
 # Add src to path to import the interface
 src_path = Path(__file__).parent.parent.parent / "src"
 sys.path.insert(0, str(src_path))
@@ -136,69 +136,32 @@ class GhostAgent(BaseGhostAgent):
         x, y = my_position
         height, width = map_state.shape 
         best_direction = None
-        max_distance = -1
+        best_distance = float("inf")
 
 
 
         #ktra hướng có chạm tường ko     
-        move =[Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+        moves =[Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
 
-        for move in move:
+        for move in moves:
             delta_row, delta_col = move.value
             new_x=x+ delta_row
             new_y=y+delta_col
             if 0 <= new_x< height and 0<= new_y <width and map_state[new_x][new_y]==0:
                 distance = abs(new_x - enemy_position[0])+ abs(new_y - enemy_position[1])
 
-                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
-                if distance>max_distance:
+                distance = abs(target[0] - new_x) + abs(target[1] - new_y)
+                if distance < best_distance:
                     max_distance=distance
                     best_direction=move
 
-        
+        #nếu bfs ko chạy được thì sẽ chọn hướng đi xa pacman nhất
         if best_direction:
          return best_direction
 
-        return Move.STAY
-                       
-
-    # BFS tìm vị trí xa nhất cho ghost so vs pacman
-   def BFS(self, my_position, enemy_position, map_state):
-
-        queue = deque([my_position])
-        visited = set([my_position])
-
-        best_pos = my_position
-        best_dist = abs(my_position[0] - enemy_position[0]) + abs(my_position[1] - enemy_position[1])
-
-        while queue:
-
-            current = queue.popleft()
-
-            distance = abs(current[0] - enemy_position[0]) + abs(current[1] - enemy_position[1])
-
-            if distance > best_dist:
-               best_dist = distance
-               best_pos = current
-
-    # BFS explore map
-            for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
-
-               delta_row, delta_col = move.value
-               new_pos = (current[0] + delta_row, current[1] + delta_col)
-
-               if self._is_valid_position(new_pos, map_state) and new_pos not in visited:
-
-                 visited.add(new_pos)
-                 queue.append(new_pos)
-               
 
 
-        return best_pos
-
-
-
-        # Calculate direction away from Pacman
+         # Calculate direction away from Pacman
         row_diff = my_position[0] - enemy_position[0]
         col_diff = my_position[1] - enemy_position[1]
         
@@ -248,4 +211,42 @@ class GhostAgent(BaseGhostAgent):
         if row < 0 or row >= height or col < 0 or col >= width:
             return False
         
-        return map_state[row, col] == 0
+        return map_state[row, col] == 0              
+
+    # BFS tìm vị trí xa nhất cho ghost so vs pacman
+   def BFS(self, my_position, enemy_position, map_state):
+
+        queue = deque([my_position])
+        visited = set([my_position])
+
+        best_pos = my_position
+        best_dist = abs(my_position[0] - enemy_position[0]) + abs(my_position[1] - enemy_position[1])
+
+        while queue:
+
+            current = queue.popleft()
+
+            distance = abs(current[0] - enemy_position[0]) + abs(current[1] - enemy_position[1])
+
+            if distance > best_dist:
+               best_dist = distance
+               best_pos = current
+
+    # BFS explore map
+            for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+
+               delta_row, delta_col = move.value
+               new_pos = (current[0] + delta_row, current[1] + delta_col)
+
+               if self._is_valid_position(new_pos, map_state) and new_pos not in visited:
+
+                 visited.add(new_pos)
+                 queue.append(new_pos)
+               
+
+
+        return best_pos
+
+
+
+       
