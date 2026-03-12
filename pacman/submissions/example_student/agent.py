@@ -18,7 +18,7 @@ from agent_interface import PacmanAgent as BasePacmanAgent
 from agent_interface import GhostAgent as BaseGhostAgent
 from environment import Move
 import numpy as np
-import random
+
 
 
 class PacmanAgent(BasePacmanAgent):
@@ -119,7 +119,7 @@ class PacmanAgent(BasePacmanAgent):
 class GhostAgent(BaseGhostAgent):
 
 
-       def __init__(self, **kwargs):
+   def __init__(self, **kwargs):
         
         super().__init__(**kwargs)
         self.name = "Example Evasive Ghost"
@@ -130,9 +130,9 @@ class GhostAgent(BaseGhostAgent):
              enemy_position: tuple,
              step_number: int) -> Move:
              
-        import random
+        
         # gọi bfs
-        self.BFS(my_position, enemy_position, map_state)
+        target = self.BFS(my_position, enemy_position, map_state)
         x, y = my_position
         height, width = map_state.shape 
         best_direction = None
@@ -142,75 +142,25 @@ class GhostAgent(BaseGhostAgent):
 
         #ktra hướng có chạm tường ko     
         move =[Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
-        move = random.choice(move)
 
-        #ktra xem các hướng ngẫu nhiên có hướng nào chạm tường ko, nếu  không thì tính kcah vs pacman, chọn hướng xa nhất
+        for move in move:
+            delta_row, delta_col = move.value
+            new_x=x+ delta_row
+            new_y=y+delta_col
+            if 0 <= new_x< height and 0<= new_y <width and map_state[new_x][new_y]==0:
+                distance = abs(new_x - enemy_position[0])+ abs(new_y - enemy_position[1])
 
-        if move == Move.UP:
-
-            new_x = x - 1
-            new_y = y
-
-            if new_x >= 0 and map_state[new_x][new_y] == 0:
-                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
-
-                if distance > max_distance:
-                    max_distance = distance
-                    best_direction = 4
-
-        elif move == Move.DOWN:
-
-            new_x = x+1
-            new_y = y
-
-            if new_x < height and map_state[new_x][new_y] == 0:
-                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
-
-                if distance > max_distance:
+                distance=abs(enemy_positiion[0] - new_x) + abs(enemy_position[1]-new_y)
+                if distance>max_distance:
                     max_distance=distance
-                    best_direction = 2
-
-        elif move == Move.LEFT:
-
-            new_x=x 
-            new_y=y-1
-
-            if new_y >= 0 and map_state[new_x][new_y] == 0:
-                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
-                if distance > max_distance:
-                    max_distance = distance
-                    best_direction = 3
-
-        elif move== Move.RIGHT:
-
-            new_x=x 
-            new_y=y+1
-
-            if new_y < width and map_state[new_x][new_y] == 0:
-                distance =abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
-                if distance > max_distance:
-                    max_distance = distance
-                    best_direction =1
+                    best_direction=move
 
         
+        if best_direction:
+         return best_direction
 
-         #nếu ko có hướng nào hợp lệ sẽ đứng yên, còn có sẽ chọn đi hướng đó           
-        #nếu ko có hướng nào hợp lệ sẽ đứng yên, còn có sẽ chọn đi hướng đó           
-        if best_direction == 1:
-          return Move.RIGHT
-        elif best_direction == 2:
-          return Move.DOWN
-        elif best_direction == 3:
-          return Move.LEFT
-        elif best_direction == 4: 
-           return Move.UP
-
-# fallback nếu không có hướng hợp lệ
         return Move.STAY
-
-       
-
-
+                       
 
     # BFS tìm vị trí xa nhất cho ghost so vs pacman
    def BFS(self, my_position, enemy_position, map_state):
