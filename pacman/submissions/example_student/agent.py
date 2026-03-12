@@ -150,7 +150,7 @@ class GhostAgent(BaseGhostAgent):
             if 0 <= new_x< height and 0<= new_y <width and map_state[new_x][new_y]==0:
                 distance = abs(new_x - enemy_position[0])+ abs(new_y - enemy_position[1])
 
-                distance=abs(enemy_positiion[0] - new_x) + abs(enemy_position[1]-new_y)
+                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
                 if distance>max_distance:
                     max_distance=distance
                     best_direction=move
