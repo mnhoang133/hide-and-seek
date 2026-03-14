@@ -32,24 +32,26 @@ class PacmanAgent(BasePacmanAgent):
         super().__init__(**kwargs)
         self.name = "Choose Search Pacman"
         self.pacman_speed = max(1, int(kwargs.get("pacman_speed", 1)))
-        
-        #Chọn thuật toán sẽ sử dụng: BFS, A* hoặc DFS (DFS không nên áp dụng cho PACMAN)
-        self.algorithm = "A*"
+
+        #Chọn thuật toán sẽ sử dụng:
+        self.algorithm = "RANDOM"  # Options: "ASTAR", "BFS", "DFS", "GREEDY", "RANDOM"
     
     def step(self, map_state: np.ndarray, 
              my_position: tuple, 
              enemy_position: tuple,
              step_number: int):
         
-        # Gọi thuật toán dựa trên lựa chọn
-        if self.algorithm == "BFS":
+        # Gọi thuật toán dựa trên lựa chọn (Nộp bài chọn 1 thuật toán thôi)
+        if self.algorithm == "ASTAR":
+            path = pacmanAlgorithm.astar(my_position, enemy_position, map_state)
+        elif self.algorithm == "BFS":
             path = pacmanAlgorithm.bfs(my_position, enemy_position, map_state)
         elif self.algorithm == "DFS":
             path = pacmanAlgorithm.dfs(my_position, enemy_position, map_state)
-        elif self.algorithm == "A*":
-            path = pacmanAlgorithm.astar(my_position, enemy_position, map_state)
-        else:
-            path = []
+        elif self.algorithm == "GREEDY":
+            path = pacmanAlgorithm.greedy_search(my_position, enemy_position, map_state)
+        else:  # RANDOM
+            path = pacmanAlgorithm.random_search(my_position, map_state)
         
         if path:
             best_move = path[0]
