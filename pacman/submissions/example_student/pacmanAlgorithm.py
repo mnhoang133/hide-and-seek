@@ -1,3 +1,5 @@
+from random import random
+import random
 import numpy as np
 from environment import Move
 
@@ -102,3 +104,40 @@ def astar(start: tuple, goal: tuple, map_state: np.ndarray) -> list:
                 frontier.append((new_f, new_g, next_pos, path + [move]))
                 
     return []
+
+def greedy_search(start: tuple, goal: tuple, map_state: np.ndarray) -> list:
+    """
+    Thuật toán Tham lam (Greedy Seeker):
+    Chỉ nhìn vào bước đi ngay trước mắt. Chọn ô có khoảng cách Manhattan 
+    tới đích gần nhất mà không quan tâm nó có dẫn vào ngõ cụt hay không.
+    """
+    neighbors = get_neighbors(start, map_state)
+    if not neighbors:
+        return []
+        
+    best_move = None
+    min_dist = float('inf')
+    
+    for next_pos, move in neighbors:
+        # Tính khoảng cách từ ô lân cận tới Ghost
+        dist = manhattan_heuristic(next_pos, goal)
+        if dist < min_dist:
+            min_dist = dist
+            best_move = move
+            
+    # Trả về một mảng chứa 1 bước đi duy nhất để đồng bộ với cấu trúc path
+    return [best_move] if best_move else []
+
+def random_search(start: tuple, map_state: np.ndarray) -> list:
+    """
+    Thuật toán Ngẫu nhiên (Random Seeker):
+    Nhắm mắt đi bừa vào một trong các ô trống xung quanh.
+    """
+    neighbors = get_neighbors(start, map_state)
+    if not neighbors:
+        return []
+        
+    # Chọn ngẫu nhiên 1 tuple (next_pos, move) từ danh sách
+    _, random_move = random.choice(neighbors)
+    
+    return [random_move]
