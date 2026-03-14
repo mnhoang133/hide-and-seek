@@ -1,0 +1,529 @@
+#1
+class GhostAgent(BaseGhostAgent):
+
+
+    def __init__(self, **kwargs):
+        
+        super().__init__(**kwargs)
+        self.name = "Example Evasive Ghost"
+
+    
+    def step(self, map_state: np.ndarray, 
+             my_position: tuple, 
+             enemy_position: tuple,
+             step_number: int) -> Move:
+             
+        import random
+        # gọi bfs
+        self.BFS(my_position, enemy_position, map_state)
+        x, y = my_position
+        height, width = map_state.shape 
+        best_direction = None
+        max_distance = -1
+
+
+
+        #ktra hướng có chạm tường ko     
+        move =[Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+        move = random.choice(move)
+
+        #ktra xem các hướng ngẫu nhiên có hướng nào chạm tường ko, nếu  không thì tính kcah vs pacman, chọn hướng xa nhất
+
+        if move == Move.UP:
+
+            new_x = x - 1
+            new_y = y
+
+            if new_x >= 0 and map_state[new_x][new_y] == 0:
+                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
+
+                if distance > max_distance:
+                    max_distance = distance
+                    best_direction = 4
+
+        elif move == Move.DOWN:
+
+            new_x = x+1
+            new_y = y
+
+            if new_x < height and map_state[new_x][new_y] == 0:
+                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
+
+                if distance > max_distance:
+                    max_distance=distance
+                    best_direction = 2
+
+        elif move == Move.LEFT:
+
+            new_x=x 
+            new_y=y-1
+
+            if new_y >= 0 and map_state[new_x][new_y] == 0:
+                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
+                if distance > max_distance:
+                    max_distance = distance
+                    best_direction = 3
+
+        elif move== Move.RIGHT:
+
+            new_x=x 
+            new_y=y+1
+
+            if new_y < width and map_state[new_x][new_y] == 0:
+                distance =abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
+                if distance > max_distance:
+                    max_distance = distance
+                    best_direction =1
+
+        
+
+         #nếu ko có hướng nào hợp lệ sẽ đứng yên, còn có sẽ chọn đi hướng đó           
+        #nếu ko có hướng nào hợp lệ sẽ đứng yên, còn có sẽ chọn đi hướng đó           
+        if best_direction == 1:
+          return Move.RIGHT
+        elif best_direction == 2:
+          return Move.DOWN
+        elif best_direction == 3:
+          return Move.LEFT
+        elif best_direction == 4: 
+           return Move.UP
+
+# fallback nếu không có hướng hợp lệ
+        return Move.STAY
+
+       
+
+
+
+    # BFS tìm vị trí xa nhất cho ghost so vs pacman
+    def BFS(self, my_position, enemy_position, map_state):
+
+        queue = deque([my_position])
+        visited = set([my_position])
+
+        best_pos = my_position
+        best_dist = abs(my_position[0] - enemy_position[0]) + abs(my_position[1] - enemy_position[1])
+
+        while queue:
+
+            current = queue.popleft()
+
+            distance = abs(current[0] - enemy_position[0]) + abs(current[1] - enemy_position[1])
+
+            if distance > best_dist:
+               best_dist = distance
+               best_pos = current
+
+    # BFS explore map
+            for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+
+               delta_row, delta_col = move.value
+               new_pos = (current[0] + delta_row, current[1] + delta_col)
+
+               if self._is_valid_position(new_pos, map_state) and new_pos not in visited:
+
+                 visited.add(new_pos)
+                 queue.append(new_pos)
+               
+
+
+        return best_pos
+
+
+
+        # Calculate direction away from Pacman
+        row_diff = my_position[0] - enemy_position[0]
+        col_diff = my_position[1] - enemy_position[1]
+        
+        # List of posible moves in order of preference
+        moves = []
+        
+        # Prioritize vertical movement away from Pacman
+        if row_diff > 0:
+            moves.append(Move.DOWN)
+        elif row_diff < 0:
+            moves.append(Move.UP)
+        
+        # Prioritize horizontal movement away from Pacman
+        if col_diff > 0:
+            moves.append(Move.RIGHT)
+        elif col_diff < 0:
+            moves.append(Move.LEFT)
+        
+        # Try each move in order
+        for move in moves:
+            delta_row, delta_col = move.value
+            new_pos = (my_position[0] + delta_row, my_position[1] + delta_col)
+            
+            # Check if move is valid
+            if self._is_valid_position(new_pos, map_state):
+                return move
+        
+        # If no preferred move is valid, try any valid move
+        all_moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+        random.shuffle(all_moves)
+        
+        for move in all_moves:
+            delta_row, delta_col = move.value
+            new_pos = (my_position[0] + delta_row, my_position[1] + delta_col)
+            
+            if self._is_valid_position(new_pos, map_state):
+                return move
+        
+        # If no move is valid, stay
+        return Move.STAY
+    
+    def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
+        """Check if a position is valid (not a wall and within bounds)."""
+        row, col = pos
+        height, width = map_state.shape
+        
+        if row < 0 or row >= height or col < 0 or col >= width:
+            return False
+        
+        return map_state[row, col] == 0 
+
+
+
+  
+  
+  
+  
+  
+  #2
+  class GhostAgent(BaseGhostAgent):
+
+
+   def __init__(self, **kwargs):
+        
+        super().__init__(**kwargs)
+        self.name = "Example Evasive Ghost"
+
+    
+   def step(self, map_state: np.ndarray, 
+             my_position: tuple, 
+             enemy_position: tuple,
+             step_number: int) -> Move:
+             
+        
+        # gọi bfs
+        target = self.BFS(my_position, enemy_position, map_state)
+        x, y = my_position
+        height, width = map_state.shape 
+        best_direction = None
+        max_distance = -1
+
+
+
+        #ktra hướng có chạm tường ko     
+        move =[Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+
+        for move in move:
+            delta_row, delta_col = move.value
+            new_x=x+ delta_row
+            new_y=y+delta_col
+            if 0 <= new_x< height and 0<= new_y <width and map_state[new_x][new_y]==0:
+                distance = abs(new_x - enemy_position[0])+ abs(new_y - enemy_position[1])
+
+                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
+                if distance>max_distance:
+                    max_distance=distance
+                    best_direction=move
+
+        
+        if best_direction:
+         return best_direction
+
+        return Move.STAY
+                       
+
+    # BFS tìm vị trí xa nhất cho ghost so vs pacman
+   def BFS(self, my_position, enemy_position, map_state):
+
+        queue = deque([my_position])
+        visited = set([my_position])
+
+        best_pos = my_position
+        best_dist = abs(my_position[0] - enemy_position[0]) + abs(my_position[1] - enemy_position[1])
+
+        while queue:
+
+            current = queue.popleft()
+
+            distance = abs(current[0] - enemy_position[0]) + abs(current[1] - enemy_position[1])
+
+            if distance > best_dist:
+               best_dist = distance
+               best_pos = current
+
+    # BFS explore map
+            for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+
+               delta_row, delta_col = move.value
+               new_pos = (current[0] + delta_row, current[1] + delta_col)
+
+               if self._is_valid_position(new_pos, map_state) and new_pos not in visited:
+
+                 visited.add(new_pos)
+                 queue.append(new_pos)
+               
+
+
+        return best_pos
+
+
+
+        # Calculate direction away from Pacman
+        row_diff = my_position[0] - enemy_position[0]
+        col_diff = my_position[1] - enemy_position[1]
+        
+        # List of posible moves in order of preference
+        moves = []
+        
+        # Prioritize vertical movement away from Pacman
+        if row_diff > 0:
+            moves.append(Move.DOWN)
+        elif row_diff < 0:
+            moves.append(Move.UP)
+        
+        # Prioritize horizontal movement away from Pacman
+        if col_diff > 0:
+            moves.append(Move.RIGHT)
+        elif col_diff < 0:
+            moves.append(Move.LEFT)
+        
+        # Try each move in order
+        for move in moves:
+            delta_row, delta_col = move.value
+            new_pos = (my_position[0] + delta_row, my_position[1] + delta_col)
+            
+            # Check if move is valid
+            if self._is_valid_position(new_pos, map_state):
+                return move
+        
+        # If no preferred move is valid, try any valid move
+        all_moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+        random.shuffle(all_moves)
+        
+        for move in all_moves:
+            delta_row, delta_col = move.value
+            new_pos = (my_position[0] + delta_row, my_position[1] + delta_col)
+            
+            if self._is_valid_position(new_pos, map_state):
+                return move
+        
+        # If no move is valid, stay
+        return Move.STAY
+    
+   def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
+        """Check if a position is valid (not a wall and within bounds)."""
+        row, col = pos
+        height, width = map_state.shape
+        
+        if row < 0 or row >= height or col < 0 or col >= width:
+            return False
+        
+        return map_state[row, col] == 0
+
+
+
+
+
+
+
+
+
+  
+  #3
+  class GhostAgent(BaseGhostAgent):
+
+
+   def __init__(self, **kwargs):
+        
+        super().__init__(**kwargs)
+        self.name = "Example Evasive Ghost"
+
+    
+   def step(self, map_state: np.ndarray, 
+             my_position: tuple, 
+             enemy_position: tuple,
+             step_number: int) -> Move:
+
+
+       #minimax
+       best_move=None
+       best_score = -float('inf')
+
+       for move in [Move.UP,Move.DOWN,Move.LEFT,Move.RIGHT]:
+           dx,dy=move.value
+           new_pos=(my_position[0]+dx, my_position[1]+dy)
+
+           if self._is_valid_position(new_pos, map_state):
+               score=self.minimax(new_pos,enemy_position, map_state,2,False)
+
+               if socre>best_score:
+                   best_score=score
+                   best_move=move
+
+       if best_move:
+           return best_move
+
+             
+        
+        # gọi bfs
+       target = self.BFS(my_position, enemy_position, map_state)
+
+       x, y = my_position
+       height, width = map_state.shape 
+       best_direction = None
+       max_distance = -1
+
+
+
+        #ktra hướng có chạm tường ko     
+       move =[Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+
+       for move in move:
+            delta_row, delta_col = move.value
+            new_x=x+ delta_row
+            new_y=y+delta_col
+            if 0 <= new_x< height and 0<= new_y <width and map_state[new_x][new_y]==0:
+                distance = abs(new_x - enemy_position[0])+ abs(new_y - enemy_position[1])
+
+                distance = abs(enemy_position[0] - new_x) + abs(enemy_position[1] - new_y)
+                if distance>max_distance:
+                    max_distance=distance
+                    best_direction=move
+
+        
+       if best_direction:
+         return best_direction
+
+       return Move.STAY
+
+
+
+         # Calculate direction away from Pacman
+       row_diff = my_position[0] - enemy_position[0]
+       col_diff = my_position[1] - enemy_position[1]
+        
+        # List of posible moves in order of preference
+       moves = []
+        
+        # Prioritize vertical movement away from Pacman
+       if row_diff > 0:
+            moves.append(Move.DOWN)
+       elif row_diff < 0:
+            moves.append(Move.UP)
+        
+        # Prioritize horizontal movement away from Pacman
+       if col_diff > 0:
+            moves.append(Move.RIGHT)
+       elif col_diff < 0:
+            moves.append(Move.LEFT)
+        
+        # Try each move in order
+       for move in moves:
+            delta_row, delta_col = move.value
+            new_pos = (my_position[0] + delta_row, my_position[1] + delta_col)
+            
+            # Check if move is valid
+            if self._is_valid_position(new_pos, map_state):
+                return move
+        
+        # If no preferred move is valid, try any valid move
+       all_moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+       random.shuffle(all_moves)
+        
+       for move in all_moves:
+            delta_row, delta_col = move.value
+            new_pos = (my_position[0] + delta_row, my_position[1] + delta_col)
+            
+            if self._is_valid_position(new_pos, map_state):
+                return move
+        
+        # If no move is valid, stay
+       return Move.STAY
+    
+   def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
+        """Check if a position is valid (not a wall and within bounds)."""
+        row, col = pos
+        height, width = map_state.shape
+        
+        if row < 0 or row >= height or col < 0 or col >= width:
+            return False
+        
+        return map_state[row, col] == 0               
+
+    # BFS tìm vị trí xa nhất cho ghost so vs pacman
+   def BFS(self, my_position, enemy_position, map_state):
+
+        queue = deque([my_position])
+        visited = set([my_position])
+
+        best_pos = my_position
+        best_dist = abs(my_position[0] - enemy_position[0]) + abs(my_position[1] - enemy_position[1])
+
+        while queue:
+
+            current = queue.popleft()
+
+            distance = abs(current[0] - enemy_position[0]) + abs(current[1] - enemy_position[1])
+
+            if distance > best_dist:
+               best_dist = distance
+               best_pos = current
+
+    # BFS explore map
+            for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+
+               delta_row, delta_col = move.value
+               new_pos = (current[0] + delta_row, current[1] + delta_col)
+
+               if self._is_valid_position(new_pos, map_state) and new_pos not in visited:
+
+                 visited.add(new_pos)
+                 queue.append(new_pos)
+               
+
+
+        return best_pos
+
+    #MINIMAX
+   def minimax(self, ghost_pos, pacman_pos, map_state, depth,ghost_turn):
+       if depth == 0:
+            return abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1])
+
+       if ghost_turn:
+
+            best = -float("inf")
+
+            for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+
+                dx, dy = move.value
+                new_pos = (ghost_pos[0] + dx, ghost_pos[1] + dy)
+
+                if self._is_valid_position(new_pos, map_state):
+
+                    score = self.minimax(new_pos, pacman_pos, map_state, depth-1, False)
+
+                    best = max(best, score)
+
+            return best
+
+       else:
+
+            best = float("inf")
+
+            for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+
+                dx, dy = move.value
+                new_pos = (pacman_pos[0] + dx, pacman_pos[1] + dy)
+
+                if self._is_valid_position(new_pos, map_state):
+
+                    score = self.minimax(ghost_pos, new_pos, map_state, depth-1, True)
+
+                    best = min(best, score)
+
+            return best
