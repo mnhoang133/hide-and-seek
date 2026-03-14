@@ -34,7 +34,7 @@ class PacmanAgent(BasePacmanAgent):
         self.pacman_speed = max(1, int(kwargs.get("pacman_speed", 1)))
 
         #Chọn thuật toán sẽ sử dụng:
-        self.algorithm = "ASTAR"  # Options: "ASTAR", "BFS", "DFS", "GREEDY", "RANDOM"
+        self.algorithm = "BFS"  # Options: "ASTAR", "BFS", "DFS", "GREEDY", "RANDOM"
     
     def step(self, map_state: np.ndarray, 
              my_position: tuple, 
@@ -109,173 +109,71 @@ class PacmanAgent(BasePacmanAgent):
 
 class GhostAgent(BaseGhostAgent):
 
-    #gọi minimax để dự đoán hướng đi của pacman, sau đó đưa ra hướng tránh xa nhất trên map
-   def minimax(self, ghost_pos, pacman_pos, map_state, depth, ghost_turn):
-    #base case: khi dự đoán đủ bước thì trả về khoảng ca1h giữa ghost và pacman
-    if depth == 0:
-        return abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1])
-
-    if ghost_turn:
-
-        best = -float("inf") # chọn kcach xa nhất
-         # dự đoán text 4 hướng đi, dự đoán hướng đi của pacman
-        for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
-
-            dx, dy = move.value
-            new_pos = (ghost_pos[0] + dx, ghost_pos[1] + dy)
-            # ko đi ngoài map và đụng tường
-            if self._is_valid_position(new_pos, map_state):
-                # gọi đệ quy để dự đoán hướng đi tiếp của pacman
-                score = self.minimax(new_pos, pacman_pos, map_state, depth-1, False)
-
-                best = max(best, score)
-
-        return best
-
-    else:
-        # lược pacman 
-        best = float("inf")
-
-        for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
-
-            dx, dy = move.value
-            new_pos = (pacman_pos[0] + dx, pacman_pos[1] + dy)
-
-            if self._is_valid_position(new_pos, map_state):
-
-                score = self.minimax(ghost_pos, new_pos, map_state, depth-1, True)
-
-                best = min(best, score)
-
-        return best
-
-   def __init__(self, **kwargs):
-        
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.name = "Example Evasive Ghost"
+        self.name = "Smart Minimax Ghost"
 
-    
-   def step(self, map_state: np.ndarray, 
+    def minimax(self, ghost_pos, pacman_pos, map_state, depth, ghost_turn):
+        # Base case: Hết độ sâu dự đoán
+        if depth == 0:
+            # Thay vì dùng Manhattan, ta gọi BFS nhanh từ pacman_pos hiện tại
+            # để biết khoảng cách THỰC TẾ đến ghost_pos
+            dist_map = self._compute_distance_map(pacman_pos, map_state)
+            return dist_map.get(ghost_pos, -1) # Trả về số bước đi thực tế
+
+        if ghost_turn:
+            best = -float("inf") # Lượt Ghost: Muốn khoảng cách max
+            for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+                dx, dy = move.value
+                new_pos = (ghost_pos[0] + dx, ghost_pos[1] + dy)
+                if self._is_valid_position(new_pos, map_state):
+                    score = self.minimax(new_pos, pacman_pos, map_state, depth-1, False)
+                    best = max(best, score)
+            # Nếu bị kẹt không có đường đi hợp lệ
+            return best if best != -float("inf") else -1
+
+        else:
+            best = float("inf") # Lượt Pacman: Muốn khoảng cách min
+            for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+                dx, dy = move.value
+                new_pos = (pacman_pos[0] + dx, pacman_pos[1] + dy)
+                if self._is_valid_position(new_pos, map_state):
+                    score = self.minimax(ghost_pos, new_pos, map_state, depth-1, True)
+                    best = min(best, score)
+            return best if best != float("inf") else -1
+
+    def step(self, map_state: np.ndarray, 
              my_position: tuple, 
              enemy_position: tuple,
              step_number: int) -> Move:
 
+        best_move = Move.STAY
+        best_score = -float("inf")
 
-       best_move = None
-       best_score = -float("inf")
-
-       for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
-
+        # Duyệt 4 hướng di chuyển hiện tại của Ghost
+        for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
             dx, dy = move.value
             new_pos = (my_position[0] + dx, my_position[1] + dy)
 
             if self._is_valid_position(new_pos, map_state):
-
+                # Gọi Minimax với độ sâu 2 (1 lượt Ghost đi, 1 lượt Pacman đi)
                 score = self.minimax(new_pos, enemy_position, map_state, 2, False)
 
                 if score > best_score:
                     best_score = score
                     best_move = move
 
-       if best_move:
-            return best_move
-             
-        
-        # gọi bfs, xác định vị trí của th pacman, sau đó chôn hướng ngc lại xa nhất
-       dist_from_enemy = self._compute_distance_map(enemy_position, map_state)
-
-
-
-       x, y = my_position
-       height, width = map_state.shape 
-       best_direction = None
-       max_dist = -1
-
-
-
-        #ktra hướng có chạm tường ko     , và hướng có khả năng di chuyển cho hide
-       possible_moves =[Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
-
-       for move in possible_moves:
-            delta_row, delta_col = move.value
-            new_x=x+ delta_row
-            new_y=y+delta_col
-
-            #kiểm tra nếu hướng đi hợp lệ ko chạm tường
-            if self._is_valid_position((new_x, new_y), map_state):
-                # Lấy khoảng cách thực tế từ BFS (nếu ô này ko đến được thì mặc định là -1)
-                actual_dist = dist_from_enemy.get((new_x, new_y), -1)
-
-                
-                if actual_dist > max_dist:
-                    max_dist = actual_dist
-                    best_direction = move
-
-        
-       if best_direction:
-            return best_direction
-
-  
-
-
-
-         # Calculate direction away from Pacman
-       row_diff = my_position[0] - enemy_position[0]
-       col_diff = my_position[1] - enemy_position[1]
-        
-        # List of posible moves in order of preference
-       moves = []
-        
-        # Prioritize vertical movement away from Pacman
-       if row_diff > 0:
-            moves.append(Move.DOWN)
-       elif row_diff < 0:
-            moves.append(Move.UP)
-        
-        # Prioritize horizontal movement away from Pacman
-       if col_diff > 0:
-            moves.append(Move.RIGHT)
-       elif col_diff < 0:
-            moves.append(Move.LEFT)
-        
-        # Try each move in order
-       for move in moves:
-            delta_row, delta_col = move.value
-            new_pos = (my_position[0] + delta_row, my_position[1] + delta_col)
-            
-            # Check if move is valid
-            if self._is_valid_position(new_pos, map_state):
-                return move
-        
-        # If no preferred move is valid, try any valid move
-       all_moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
-       random.shuffle(all_moves)
-        
-       for move in all_moves:
-            delta_row, delta_col = move.value
-            new_pos = (my_position[0] + delta_row, my_position[1] + delta_col)
-            
-            if self._is_valid_position(new_pos, map_state):
-                return move
-        
-        # If no move is valid, stay
-       return Move.STAY
+        return best_move
                  
-    # BFS tìm vị trí xa nhất cho ghost so vs pacman
-   def _compute_distance_map(self, start_pos: tuple, map_state: np.ndarray) -> dict:
+    def _compute_distance_map(self, start_pos: tuple, map_state: np.ndarray) -> dict:
         """Dùng BFS để tính khoảng cách từ một điểm đến toàn bộ các ô khác."""
-
-
-        queue = deque([(start_pos, 0)]) # (vị trí, khoảng cách) # dnah sách các ô cần duyệt và lưu khaong cach tính
+        queue = deque([(start_pos, 0)]) 
         visited = {start_pos: 0}
-        
         height, width = map_state.shape 
-        # lặp bfs để check từng lớp
+        
         while queue:
             (curr_row, curr_col), dist = queue.popleft()
-            # check 4 hướng
             for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
-                # tìm vị trí mới
                 dr, dc = move.value
                 nr, nc = curr_row + dr, curr_col + dc
                 
@@ -285,8 +183,8 @@ class GhostAgent(BaseGhostAgent):
                     visited[(nr, nc)] = dist + 1
                     queue.append(((nr, nc), dist + 1))
         return visited
-    # thuật toán ktra vị trí hợp lệ
-   def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
+        
+    def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
         row, col = pos
         h, w = map_state.shape
         return 0 <= row < h and 0 <= col < w and map_state[row, col] == 0
