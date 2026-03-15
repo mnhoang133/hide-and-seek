@@ -94,7 +94,7 @@ class PacmanAgent(BasePacmanAgent):
         
         except Exception as e:
             # Việc in này không làm sập framework Arena
-            print(f"[CẢNH BÁO TỚI MẠNG] Pacman lỗi tại bước {step_number}: {e}")
+            #print(f"[CẢNH BÁO TỚI MẠNG] Pacman lỗi tại bước {step_number}: {e}")
             
             # Cố gắng tìm một hướng bất kỳ không bị vướng tường để lách qua
             fallback_moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
