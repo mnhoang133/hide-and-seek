@@ -10,6 +10,7 @@ from inspect import currentframe
 from re import X
 import sys
 from pathlib import Path
+import time
 
 # Add src to path to import the interface
 src_path = Path(__file__).parent.parent.parent / "src"
@@ -34,46 +35,80 @@ class PacmanAgent(BasePacmanAgent):
         self.pacman_speed = max(1, int(kwargs.get("pacman_speed", 1)))
 
         #Chọn thuật toán sẽ sử dụng:
-        self.algorithm = "BFS"  # Options: "ASTAR", "BFS", "DFS", "GREEDY", "RANDOM"
+        self.algorithm = "ASTAR"  # Options: "ASTAR", "BFS", "DFS", "GREEDY", "RANDOM"
     
     def step(self, map_state: np.ndarray, 
              my_position: tuple, 
              enemy_position: tuple,
              step_number: int):
         
-        # Gọi thuật toán dựa trên lựa chọn (Nộp bài chọn 1 thuật toán thôi)
-        if self.algorithm == "ASTAR":
-            path = pacmanAlgorithm.astar(my_position, enemy_position, map_state)
-        elif self.algorithm == "BFS":
-            path = pacmanAlgorithm.bfs(my_position, enemy_position, map_state)
-        elif self.algorithm == "DFS":
-            path = pacmanAlgorithm.dfs(my_position, enemy_position, map_state)
-        elif self.algorithm == "GREEDY":
-            path = pacmanAlgorithm.greedy_search(my_position, enemy_position, map_state)
-        else:  # RANDOM
-            path = pacmanAlgorithm.random_search(my_position, map_state)
-        
-        if path:
-            best_move = path[0]
-            desired_steps = 1
-            
-            # Đếm số bước liên tiếp trên cùng một hướng
-            for i in range(1, len(path)):
-                if path[i] == best_move:
-                    desired_steps += 1
-                else:
-                    break
+        try:
+            # Chọn thuật toán tương ứng
+            if self.algorithm == "ASTAR":
+                path = pacmanAlgorithm.astar(my_position, enemy_position, map_state)
+            elif self.algorithm == "BFS":
+                path = pacmanAlgorithm.bfs(my_position, enemy_position, map_state)
+            elif self.algorithm == "DFS":
+                path = pacmanAlgorithm.dfs(my_position, enemy_position, map_state)
+            elif self.algorithm == "GREEDY":
+                path = pacmanAlgorithm.greedy_search(my_position, enemy_position, map_state)
+            elif self.algorithm == "RANDOM":
+                path = pacmanAlgorithm.random_search(my_position, map_state)
+            else:
+                path = []
+                
+            if path:
+                best_move = path[0]
+                if len(path) == 1:
+                    # Lấy số micro-giây hiện tại chia lấy dư cho 100 để tạo tỷ lệ phần trăm
+                    rand_percent = int(time.time() * 1000000) % 100
                     
-            # Tuyệt chiêu phóng lố (Lunge) đón đầu Ghost
-            if desired_steps == len(path) and desired_steps < self.pacman_speed:
-                desired_steps = self.pacman_speed
+                    # 70% xác suất Pacman phóng lố (đề phòng Ghost chạy thẳng)
+                    if rand_percent < 70:
+                        steps = self._max_valid_steps(my_position, best_move, map_state, self.pacman_speed)
+                        if steps > 0:
+                            return (best_move, steps)
+                    # 30% xác suất đứng yên, chờ Ghost "tự hủy" chui đầu vào rọ
+                    else:
+                        return (Move.STAY, 1)
+                    
+                desired_steps = 1
                 
-            steps = self._max_valid_steps(my_position, best_move, map_state, desired_steps)
-            if steps > 0:
-                return (best_move, steps)
-                
-        return (Move.STAY, 1)
+                # Đếm số bước liên tiếp trên cùng một hướng
+                for i in range(1, len(path)):
+                    if path[i] == best_move:
+                        desired_steps += 1
+                    else:
+                        break
+                        
+                # Tuyệt chiêu phóng lố đón đầu (Lunge)
+                if desired_steps == len(path) and desired_steps < self.pacman_speed:
+                    desired_steps = self.pacman_speed
+                    
+                steps = self._max_valid_steps(my_position, best_move, map_state, desired_steps)
+                if steps > 0:
+                    return (best_move, steps)
+                    
+            return (Move.STAY, 1)
 
+        
+        except Exception as e:
+            # Việc in này không làm sập framework Arena
+            print(f"[CẢNH BÁO TỚI MẠNG] Pacman lỗi tại bước {step_number}: {e}")
+            
+            # Cố gắng tìm một hướng bất kỳ không bị vướng tường để lách qua
+            fallback_moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+            
+            for move in fallback_moves:
+                delta_row, delta_col = move.value
+                next_pos = (my_position[0] + delta_row, my_position[1] + delta_col)
+                
+                if self._is_valid_position(next_pos, map_state):
+                    # Nếu thấy đường trống, đi đại 1 bước
+                    return (move, 1)
+                    
+            # 3. Nếu cả 4 bề đều là tường (hoặc lỗi map), đành đứng im chịu trận
+            return (Move.STAY, 1)
     
     def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
         """Check if a position is valid (not a wall and within bounds)."""
