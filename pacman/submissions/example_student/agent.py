@@ -11,6 +11,7 @@ from re import X
 import sys
 from pathlib import Path
 import time
+import pickle 
 
 # Add src to path to import the interface
 src_path = Path(__file__).parent.parent.parent / "src"
@@ -26,88 +27,123 @@ import pacmanAlgorithm
 
 class PacmanAgent(BasePacmanAgent):
     def __init__(self, **kwargs):
-        """
-        Initialize the Pacman agent.
-        Students can set up any data structures they need here.
-        """
         super().__init__(**kwargs)
-        self.name = "Choose Search Pacman"
+        self.name = "Predictive ML Pacman"
         self.pacman_speed = max(1, int(kwargs.get("pacman_speed", 1)))
+        
+        # Đọc luật capture_distance từ Command Line
+        self.capture_threshold = 1 
+        if '--capture-distance' in sys.argv:
+            try:
+                idx = sys.argv.index('--capture-distance')
+                self.capture_threshold = int(sys.argv[idx + 1])
+            except (ValueError, IndexError):
+                pass
+                
+        self.algorithm = "ASTAR" 
+        
+        # --- NẠP MÔ HÌNH MACHINE LEARNING ---
+        self.ml_model = None
+        try:
+            # Dùng Path để tìm chính xác file .pkl nằm cùng thư mục với agent.py
+            model_path = Path(__file__).parent / 'ghost_predictor.pkl'
+            with open(model_path, 'rb') as f:
+                self.ml_model = pickle.load(f)
+            print(f"[THÔNG BÁO] Nạp thành công Não bộ AI từ {model_path}!")
+        except Exception as e:
+            print(f"[CẢNH BÁO] Không thể tải mô hình ML, tự động dùng A* gốc. Lỗi: {e}")
+        
+        self.locked_target = None
+        self.lock_counter = 0
 
-        #Chọn thuật toán sẽ sử dụng:
-        self.algorithm = "ASTAR"  # Options: "ASTAR", "BFS", "DFS", "GREEDY", "RANDOM"
-    
     def step(self, map_state: np.ndarray, 
              my_position: tuple, 
              enemy_position: tuple,
              step_number: int):
         
         try:
-            # Chọn thuật toán tương ứng
+            path = []
+            
+            # 1. KIỂM TRA KHOẢNG CÁCH THỰC TẾ
+            dist_to_ghost = abs(my_position[0] - enemy_position[0]) + abs(my_position[1] - enemy_position[1])
+            
+            # 2. KHỞI ĐỘNG CHIẾN THUẬT HYBRID
+            target_pos = enemy_position # Mặc định là đuổi theo sau đuôi
+            
+            # Kích hoạt Thiên Nhãn (Dự đoán) nếu Ghost ở xa và Model đã nạp
+            # Kích hoạt Thiên Nhãn (Dự đoán) nếu Ghost ở xa và Model đã nạp
+            if dist_to_ghost > 5 and self.ml_model is not None:
+                # NẾU ĐANG BỊ KHÓA MỤC TIÊU: Giữ nguyên quyết định cũ để tránh nhảy qua nhảy lại
+                if self.lock_counter > 0 and self.locked_target is not None:
+                    target_pos = self.locked_target
+                    self.lock_counter -= 1
+                else:
+                    # NẾU HẾT KHÓA: Bắt đầu dự đoán mục tiêu mới
+                    input_data = np.array([[my_position[0], my_position[1], enemy_position[0], enemy_position[1]]])
+                    prediction = self.ml_model.predict(input_data)[0] 
+                    pred_r, pred_c = map(int, prediction.split('_'))
+                    predicted_pos = (pred_r, pred_c)
+                    
+                    if self._is_valid_position(predicted_pos, map_state):
+                        target_pos = predicted_pos 
+                        # KHÓA MỤC TIÊU LẠI: Bắt buộc Pacman phải theo hướng này trong 3 bước tới
+                        self.locked_target = target_pos
+                        self.lock_counter = 3
+            else:
+                # Nếu đã áp sát Ghost (khoảng cách <= 5), mở khóa ngay lập tức để cắn xé
+                self.lock_counter = 0
+                self.locked_target = None
+
+            # 3. GỌI THUẬT TOÁN TÌM ĐƯỜNG (A*)
             if self.algorithm == "ASTAR":
-                path = pacmanAlgorithm.astar(my_position, enemy_position, map_state)
+                path = pacmanAlgorithm.astar(my_position, target_pos, map_state)
+                
+                # HỆ THỐNG AN TOÀN (FALLBACK)
+                # Nếu model ML dự đoán vào một góc chết không thể tới, lập tức quay lại đuổi Ghost
+                if not path and target_pos != enemy_position:
+                    path = pacmanAlgorithm.astar(my_position, enemy_position, map_state)
+            
             elif self.algorithm == "BFS":
                 path = pacmanAlgorithm.bfs(my_position, enemy_position, map_state)
-            elif self.algorithm == "DFS":
-                path = pacmanAlgorithm.dfs(my_position, enemy_position, map_state)
             elif self.algorithm == "GREEDY":
                 path = pacmanAlgorithm.greedy_search(my_position, enemy_position, map_state)
-            elif self.algorithm == "RANDOM":
-                path = pacmanAlgorithm.random_search(my_position, map_state)
             else:
                 path = []
                 
+            # 4. LOGIC DI CHUYỂN TỐI ƯU
             if path:
                 best_move = path[0]
-                if len(path) == 1:
-                    # Lấy số micro-giây hiện tại chia lấy dư cho 100 để tạo tỷ lệ phần trăm
-                    rand_percent = int(time.time() * 1000000) % 100
-                    
-                    # 70% xác suất Pacman phóng lố (đề phòng Ghost chạy thẳng)
-                    if rand_percent < 70:
-                        steps = self._max_valid_steps(my_position, best_move, map_state, self.pacman_speed)
-                        if steps > 0:
-                            return (best_move, steps)
-                    # 30% xác suất đứng yên, chờ Ghost "tự hủy" chui đầu vào rọ
-                    else:
-                        return (Move.STAY, 1)
-                    
-                desired_steps = 1
                 
-                # Đếm số bước liên tiếp trên cùng một hướng
-                for i in range(1, len(path)):
-                    if path[i] == best_move:
-                        desired_steps += 1
-                    else:
-                        break
+                # CẬP NHẬT: Dồn góc khi áp sát
+                if len(path) == 1:
+                    desired_steps = 1
+                else:
+                    desired_steps = 1
+                    for i in range(1, len(path)):
+                        if path[i] == best_move:
+                            desired_steps += 1
+                        else:
+                            break
+                            
+                    # Tăng tốc độ tối đa để nhanh chóng thu hẹp khoảng cách
+                    if desired_steps == len(path) and desired_steps < self.pacman_speed:
+                        desired_steps = self.pacman_speed
                         
-                # Tuyệt chiêu phóng lố đón đầu (Lunge)
-                if desired_steps == len(path) and desired_steps < self.pacman_speed:
-                    desired_steps = self.pacman_speed
-                    
                 steps = self._max_valid_steps(my_position, best_move, map_state, desired_steps)
                 if steps > 0:
                     return (best_move, steps)
                     
             return (Move.STAY, 1)
 
-        
+        # TÚI KHÍ BẢO VỆ CUỐI CÙNG
         except Exception as e:
-            # Việc in này không làm sập framework Arena
-            #print(f"[CẢNH BÁO TỚI MẠNG] Pacman lỗi tại bước {step_number}: {e}")
-            
-            # Cố gắng tìm một hướng bất kỳ không bị vướng tường để lách qua
+            print(f"[CẢNH BÁO TỚI MẠNG] Pacman lỗi tại bước {step_number}: {e}")
             fallback_moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
-            
             for move in fallback_moves:
                 delta_row, delta_col = move.value
                 next_pos = (my_position[0] + delta_row, my_position[1] + delta_col)
-                
                 if self._is_valid_position(next_pos, map_state):
-                    # Nếu thấy đường trống, đi đại 1 bước
                     return (move, 1)
-                    
-            # 3. Nếu cả 4 bề đều là tường (hoặc lỗi map), đành đứng im chịu trận
             return (Move.STAY, 1)
     
     def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
@@ -139,7 +175,6 @@ class PacmanAgent(BasePacmanAgent):
         if move in (Move.LEFT, Move.RIGHT):
             return abs(col_diff)
         return 1
-
 
 
 class GhostAgent(BaseGhostAgent):
