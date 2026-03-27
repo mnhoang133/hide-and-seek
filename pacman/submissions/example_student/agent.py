@@ -182,6 +182,48 @@ class GhostAgent(BaseGhostAgent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.name = "Smart Minimax Ghost"
+        self.last_move = None # lưu vị trí đã đi để phạt nếu quay đầu
+
+
+    def _random_move(self, pos: tuple, map_state: np.ndarray) -> tuple:
+        moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+        valid_moves = []
+
+        for move in moves:
+            dx, dy = move.value
+            new_pos = (pos[0] + dx, pos[1] + dy)
+            if self._is_valid_position(new_pos, map_state):
+                valid_moves.append(new_pos)
+
+    # nếu không có đường đi thì đứng yên
+        if not valid_moves:
+           return pos
+
+        return random.choice(valid_moves)
+
+
+    def monte_carlo(self, ghost_pos, pacman_pos, map_state, simulations=100):
+        """thực hiện một số mô phỏng đoán trước step của pacman"""
+        if simulations<=0:
+            return 0
+
+        total_distance =0
+        for _ in range(simulations):
+            sim_ghost_pos = ghost_pos
+            sim_pacman_pos=pacman_pos
+             
+            for _ in range(10):# mô phỏng 10 bước đi của pacman
+                sim_ghost_pos = self._random_move(sim_ghost_pos, map_state)
+                sim_pacman_pos = self._random_move(sim_pacman_pos, map_state)
+
+            dist_map = self._compute_distance_map(sim_pacman_pos, map_state)
+            dist = dist_map.get(sim_ghost_pos, 0)
+            total_distance += dist
+
+
+        return total_distance/simulations
+
+       
 
     def minimax(self, ghost_pos, pacman_pos, map_state, depth, ghost_turn):
         # Base case: Hết độ sâu dự đoán
@@ -192,12 +234,12 @@ class GhostAgent(BaseGhostAgent):
             return dist_map.get(ghost_pos, -1) # Trả về số bước đi thực tế
 
         if ghost_turn:
-            best = -float("inf") # Lượt Ghost: Muốn khoảng cách max
+            best = -float("inf") # Lượt Ghost: Muốn khoảng cách max, khởi tạo vs gtri nhỏ nhất
             for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
                 dx, dy = move.value
                 new_pos = (ghost_pos[0] + dx, ghost_pos[1] + dy)
                 if self._is_valid_position(new_pos, map_state):
-                    score = self.minimax(new_pos, pacman_pos, map_state, depth-1, False)
+                    score = self.minimax(new_pos, pacman_pos, map_state, depth-1, False) #True là lượt ghost,False là pacman
                     best = max(best, score)
             # Nếu bị kẹt không có đường đi hợp lệ
             return best if best != -float("inf") else -1
@@ -212,6 +254,12 @@ class GhostAgent(BaseGhostAgent):
                     best = min(best, score)
             return best if best != float("inf") else -1
 
+        # tóm lại thuật toán minimax dự đoán lượt đi của ghost và pacman,sau đó sẽ đánh giá đưa ra nước đi tốt nhất cho ghost
+        # dựa trên 2 lượt đi của pacman và ghost
+
+
+
+
     def step(self, map_state: np.ndarray, 
              my_position: tuple, 
              enemy_position: tuple,
@@ -220,26 +268,50 @@ class GhostAgent(BaseGhostAgent):
         best_move = Move.STAY
         best_score = -float("inf")
 
+        dist_now = self._compute_distance_map(enemy_position, map_state).get(my_position, 0)
+
         # Duyệt 4 hướng di chuyển hiện tại của Ghost
         for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
             dx, dy = move.value
-            new_pos = (my_position[0] + dx, my_position[1] + dy)
+            new_pos = (my_position[0] + dx, my_position[1] + dy)# tính vị trí mới nếu ghost đi htai
 
             if self._is_valid_position(new_pos, map_state):
                 # Gọi Minimax với độ sâu 2 (1 lượt Ghost đi, 1 lượt Pacman đi)
                 score = self.minimax(new_pos, enemy_position, map_state, 2, False)
+                #monte carlo dự đoán 10 step của pacman sau đó tính kcach tb
+                mc_score = self.monte_carlo(new_pos, enemy_position, map_state, simulations =50)
+                score += 0.3 * mc_score # kết hợp điểm minimax và điểm monte carlo để xem xét các bước đi
 
+                # nếu đi xa hơn
+                dist_new= self._compute_distance_map(enemy_position, map_state). get(new_pos, 0)
+                if dist_new > dist_now:
+                    score +=1
+
+
+                # nếu quay đầu
+                if self.last_move:
+                    opposite = {
+                        Move.UP: Move.DOWN,
+                        Move.DOWN: Move.UP,
+                        Move.LEFT:Move.RIGHT,
+                        Move.RIGHT:Move.LEFT
+                        }
+                    if move == opposite.get(self.last_move):
+                        score -= 2 # phạt nếu quay đầu
                 if score > best_score:
                     best_score = score
                     best_move = move
+
+
+        self.last_move = best_move
 
         return best_move
                  
     def _compute_distance_map(self, start_pos: tuple, map_state: np.ndarray) -> dict:
         """Dùng BFS để tính khoảng cách từ một điểm đến toàn bộ các ô khác."""
         queue = deque([(start_pos, 0)]) 
-        visited = {start_pos: 0}
-        height, width = map_state.shape 
+        visited = {start_pos: 0}#lưu khoảng cách những ô đã đi qua và khoảng cách tới ô đó
+        height, width = map_state.shape # kích thước bản đồ (lun mặc định rồi)
         
         while queue:
             (curr_row, curr_col), dist = queue.popleft()
@@ -247,17 +319,16 @@ class GhostAgent(BaseGhostAgent):
                 dr, dc = move.value
                 nr, nc = curr_row + dr, curr_col + dc
                 
-                if (0 <= nr < height and 0 <= nc < width and 
+                if (0 <= nr < height and 0 <= nc < width and # lấy dki: ko chạm tường,ko vượt map,ko đi vào ô đã đi
                     map_state[nr, nc] == 0 and (nr, nc) not in visited):
                     
                     visited[(nr, nc)] = dist + 1
-                    queue.append(((nr, nc), dist + 1))
+                    queue.append(((nr, nc), dist + 1))#lưu kcach mới đã đi
         return visited
-        
+      # như cũ kiểm tra xem vị trí mới có hợp lệ vượt map hay chạm tường ko  
     def _is_valid_position(self, pos: tuple, map_state: np.ndarray) -> bool:
         row, col = pos
         h, w = map_state.shape
         return 0 <= row < h and 0 <= col < w and map_state[row, col] == 0
-
 
        
