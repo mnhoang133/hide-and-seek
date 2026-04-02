@@ -226,7 +226,7 @@ class PacmanAgent(BasePacmanAgent):
             return abs(col_diff)
         return 1
 
-class GghostAgent(BaseGhostAgent):
+class GhostAgent(BaseGhostAgent):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
