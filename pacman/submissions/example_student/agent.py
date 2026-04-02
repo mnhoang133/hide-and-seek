@@ -226,116 +226,227 @@ class PacmanAgent(BasePacmanAgent):
             return abs(col_diff)
         return 1
 
+
 class GhostAgent(BaseGhostAgent):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.name = "Example Evasive Ghost"
+        self.name = "Ghost Fixed"
+        self.last_move = None
+        self.prev_positions = []  # lưu lịch sử vị trí để phá loop
 
-        # MEMORY
-        self.known_map = np.full((21, 21), -1) # tạo bộ nhớ cho map, ban đầu mù nên là -1
-        self.last_known_enemy_pos = None# lưu vị trí cuối cùng của pacman
-    
-        
-     #MEMORY
-    def _update_memory(self, map_state):
-        for i in range(21):
-            for j in range(21):
-                if map_state[i][j] != -1:# vị trí bdau ko thấy thì là -1
-                    # chỉ update những ô đã nhìn thấy
-                    self.known_map[i][j] = map_state[i][j]
+        self.known_map = np.full((21, 21), -1)
+        self.last_known_enemy_pos = None
 
 
+    def _explore(self, pos):
+        best_move = Move.STAY
+        best_score = -float("inf")
 
-    def step(self, map_state: np.ndarray, 
-             my_position: tuple, 
-             enemy_position: tuple,
-             step_number: int) -> Move:
+        for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+            dx, dy = move.value
+            new_pos = (pos[0] + dx, pos[1] + dy)
 
-        #   UPDATE MEMORY 
-        self._update_memory(map_state) # lấy phàn thấy. và nhớ
+            # không đi vào tường / ngoài map
+            if not self._is_valid_position(new_pos):
+                continue
 
-        #  LƯU LẦN CUỐI THẤY ENEMY
+            score = 0
+
+            # ưu tiên ô chưa khám phá
+            if self.known_map[new_pos[0]][new_pos[1]] == -1:
+                score += 5
+
+            # ưu tiên nhiều đường thoát
+            escape_routes = self._count_valid_moves(new_pos)
+            score += 2 * escape_routes
+
+            # phạt ngõ cụt
+            if escape_routes <= 1:
+                score -= 10
+
+            # tránh quay đầu
+            if self.last_move is not None:
+                opposite = {
+                    Move.UP: Move.DOWN,
+                    Move.DOWN: Move.UP,
+                    Move.LEFT: Move.RIGHT,
+                    Move.RIGHT: Move.LEFT,
+                }
+                if move == opposite.get(self.last_move):
+                    score -= 5
+
+            # phá loop mạnh: tránh quay lại vị trí cũ
+            if new_pos in self.prev_positions[-4:]:
+                score -= 15
+
+            # random nhẹ
+            score += random.random()
+
+            if score > best_score:
+                best_score = score
+                best_move = move
+
+        return best_move
+
+
+    def step(self, map_state, my_position, enemy_position, step_number):
+
+        # cập nhật map đã thấy
+        self._update_memory(map_state)
+
+        # lưu vị trí đã đi để tránh loop
+        self.prev_positions.append(my_position)
+        if len(self.prev_positions) > 6:
+            self.prev_positions.pop(0)
+
+        # lưu enemy nếu nhìn thấy
         if enemy_position is not None:
             self.last_known_enemy_pos = enemy_position
 
-        #  XÁC ĐỊNH THREAT 
-        threat = enemy_position or self.last_known_enemy_pos# thấy trực tiếp thì dùng, không thì dùng vị trí cũ
+        threat = enemy_position or self.last_known_enemy_pos
 
-        #  KHÔNG BIẾT ENEMY → RANDOM 
+        # không thấy enemy -> explore
         if threat is None:
-            return self._random_move(my_position)
-
-        #  TÍNH HƯỚNG CHẠY XA 
-        row_diff = my_position[0] - threat[0]
-        col_diff = my_position[1] - threat[1]
-
-        moves = []
+            return self._explore(my_position)
 
         best_move = Move.STAY
-        best_dist = -1
+        best_score = -float("inf")
+
+        # BFS từ pacman để biết khoảng cách thật
+        dist_map = self._compute_distance_map(threat)
 
         for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
             dx, dy = move.value
             new_pos = (my_position[0] + dx, my_position[1] + dy)
 
+            # không hợp lệ thì bỏ
             if not self._is_valid_position(new_pos):
                 continue
 
-            dist = abs(new_pos[0] - threat[0]) + abs(new_pos[1] - threat[1])
+            # tránh chết ngay
+            if self._is_dead(new_pos, threat):
+                continue
 
-            if dist > best_dist:
-                best_dist = dist
+            # nếu BFS không tới được -> bỏ (tránh đi lung tung gây đứng)
+            dist = dist_map.get(new_pos, -1)
+            if dist == -1:
+                continue
+
+            escape_routes = self._count_valid_moves(new_pos)
+
+            score = 0
+
+            # càng xa pacman càng tốt
+            score += 4 * dist
+
+            # nhiều đường thoát càng tốt
+            score += 2 * escape_routes
+
+            # bonus khám phá
+            if self.known_map[new_pos[0]][new_pos[1]] == -1:
+                score += 4
+
+            # gần quá thì phạt mạnh
+            if dist <= 2:
+                score -= 80
+
+            # ngõ cụt
+            if escape_routes <= 1:
+                score -= 30
+
+            # tránh quay đầu
+            if self.last_move is not None:
+                opposite = {
+                    Move.UP: Move.DOWN,
+                    Move.DOWN: Move.UP,
+                    Move.LEFT: Move.RIGHT,
+                    Move.RIGHT: Move.LEFT,
+                }
+                if move == opposite.get(self.last_move):
+                    score -= 20
+
+            # phá loop mạnh: tránh quay lại vị trí gần đây
+            if new_pos in self.prev_positions[-4:]:
+                score -= 40
+
+            # random nhẹ để tránh stuck
+            score += random.random()
+
+            if score > best_score:
+                best_score = score
                 best_move = move
 
-        #   THỬ MOVE ƯU TIÊN 
+        self.last_move = best_move
+
+        # nếu vẫn bị STAY -> fallback random để tránh đứng im
+        if best_move == Move.STAY:
+            return self._random_move(my_position)
+
+        return best_move
+
+
+    def _update_memory(self, map_state):
+        for i in range(21):
+            for j in range(21):
+                if map_state[i][j] != -1:
+                    self.known_map[i][j] = map_state[i][j]
+
+
+    def _is_valid_position(self, pos):
+        row, col = pos
+        return (
+            0 <= row < 21 and
+            0 <= col < 21 and
+            self.known_map[row][col] != 1
+        )
+
+
+    def _compute_distance_map(self, start_pos):
+        queue = deque([(start_pos, 0)])
+        visited = {start_pos: 0}
+
+        while queue:
+            (row, col), dist = queue.popleft()
+
+            for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+                dr, dc = move.value
+                nr, nc = row + dr, col + dc
+
+                if (nr, nc) not in visited and self._is_valid_position((nr, nc)):
+                    visited[(nr, nc)] = dist + 1
+                    queue.append(((nr, nc), dist + 1))
+
+        return visited
+
+
+    def _random_move(self, my_position):
+        moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+        random.shuffle(moves)
+
         for move in moves:
             dx, dy = move.value
             new_pos = (my_position[0] + dx, my_position[1] + dy)
 
-            if self._is_valid_position(new_pos):# chỉ đi nếu: trong map, ko tường, đã biết đi được
-                return move
-
-        #   FALLBACK RANDOM 
-        all_moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
-        random.shuffle(all_moves)
-
-        for move in all_moves:
-            dx, dy = move.value
-            new_pos = (my_position[0] + dx, my_position[1] + dy)
-
             if self._is_valid_position(new_pos):
                 return move
 
         return Move.STAY
 
-    # MEMORY 
-    def _update_memory(self, map_state):
-        for i in range(21):
-            for j in range(21):
-                if map_state[i][j] != -1: # chỉ update ô nhìn thấy
-                    self.known_map[i][j] = map_state[i][j]# chỉ đi những ô đã thấy và là đường 0
 
-    #  RANDOM 
-    def _random_move(self, my_position: tuple) -> Move:
-        all_moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
-        random.shuffle(all_moves)
-
-        for move in all_moves:
+    def _count_valid_moves(self, pos):
+        count = 0
+        for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
             dx, dy = move.value
-            new_pos = (my_position[0] + dx, my_position[1] + dy)
+            new_pos = (pos[0] + dx, pos[1] + dy)
 
             if self._is_valid_position(new_pos):
-                return move
+                count += 1
 
-        return Move.STAY
+        return count
 
-    # VALID 
-    def _is_valid_position(self, pos: tuple) -> bool:
-        row, col = pos
 
-        return (
-            0 <= row < 21 and
-            0 <= col < 21 and
-            self.known_map[row, col] == 0
-        )
+    def _is_dead(self, ghost_pos, pacman_pos):
+        if pacman_pos is None:
+            return False
+        return abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1]) <= 1
