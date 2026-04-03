@@ -43,9 +43,15 @@ class PacmanAgent(BasePacmanAgent):
         self.last_known_enemy_pos = None
         self.internal_map = np.full((21, 21), -1, dtype=int)  # -1 = unseen, 0 = empty, 1 = wall
 
+        self.last_ghost_dir = None       # Lưu quán tính (hướng đi) cuối cùng của Ghost
+        self.predicted_target = None     # Tọa độ dự đoán Ghost sẽ tới
+
         # Dồn góc
         self.locked_target = None
         self.lock_counter = 0
+
+        # Chạy khi hết sương mù
+        self.patrol_target = None
     
     def step(self, map_state: np.ndarray, 
              my_position: tuple, 
@@ -66,75 +72,110 @@ class PacmanAgent(BasePacmanAgent):
         # TODO: Implement your search algorithm here
         
         try:
-            # Cập nhật bộ nhớ bản đồ với thông tin mới nhất
+            # Cập nhật bản đồ 
             self._update_memory(map_state)
             
-            # Tính toán hướng đi (quán tính) của Ghost
-            ghost_dir = None
+            # Cập nhật vị trí, hướng đi của Ghost
             if enemy_position is not None:
                 if self.last_known_enemy_pos is not None and self.last_known_enemy_pos != enemy_position:
-                    ghost_dir = (enemy_position[0] - self.last_known_enemy_pos[0], 
-                                 enemy_position[1] - self.last_known_enemy_pos[1])
+                    # Ghi nhớ hướng đi cuối cùng của Ghost
+                    self.last_ghost_dir = (enemy_position[0] - self.last_known_enemy_pos[0], 
+                                           enemy_position[1] - self.last_known_enemy_pos[1])
                 self.last_known_enemy_pos = enemy_position
+                self.predicted_target = None # Hủy dự đoán cũ khi nhìn thấy trực tiếp
 
-            # Nếu đã chạy tới nơi nghi ngờ mà không thấy -> xóa dấu vết
-            if my_position == self.last_known_enemy_pos:
-                self.last_known_enemy_pos = None
+            # Xóa dấu vết khi đã tới nơi 
+            if self.last_known_enemy_pos is not None:
+                if my_position == self.last_known_enemy_pos or my_position == self.predicted_target:
+                    self.last_known_enemy_pos = None
+                    self.last_ghost_dir = None
+                    self.predicted_target = None
 
-            # Trạng thái hành động
+            # Các trạng thái hành vi chính:
             target_pos = None
-            is_chasing = False
+            current_state = 0
+            explore_path = []
 
             if enemy_position is not None:
-                # 1. Khi thấy Ghost: Đuổi theo trực tiếp
-                is_chasing = True
+                # Đuổi khi thấy trực tiếp 
+                current_state = 1
                 target_pos = enemy_position
                 
-                # Chiến thuật dồn góc chặn ngã tư (Chỉ kích hoạt sau step 50)
-                if step_number > 50 and ghost_dir is not None:
+                # Bật Dồn góc sớm từ step 15
+                if step_number > 1 and self.last_ghost_dir is not None:
                     if self.lock_counter > 0 and self.locked_target is not None:
                         target_pos = self.locked_target
                         self.lock_counter -= 1
-                        # Nếu đến điểm chặn rồi thì mở khóa sớm
                         if my_position == self.locked_target:
                             self.lock_counter = 0
                             self.locked_target = None
                             target_pos = enemy_position
                     else:
-                        choke_point = self._get_forward_choke_point(enemy_position, ghost_dir, self.internal_map)
+                        choke_point = self._get_forward_choke_point(enemy_position, self.last_ghost_dir, self.internal_map)
                         target_pos = choke_point
                         if choke_point != enemy_position:
                             self.locked_target = choke_point
                             self.lock_counter = 3
                             
             elif self.last_known_enemy_pos is not None:
-                # Mất dấu nhưng còn nhớ vị trí cuối -> Đi thẳng về hướng đó
-                target_pos = self.last_known_enemy_pos
+                # Đuổi theo dấu vết cũ 
+                current_state = 2
+                
+                if self.predicted_target is None:
+                    self.predicted_target = self._predict_ghost_target(
+                        self.last_known_enemy_pos, 
+                        self.last_ghost_dir, 
+                        self.internal_map, 
+                        predict_steps=3
+                    )
+                
+                target_pos = self.predicted_target
                 self.lock_counter = 0
                 self.locked_target = None
                 
             else:
-                # Khám phá bản đồ khi chưa thấy gì
-                target_pos = self._find_closest_frontier(my_position)
+                # TRẠNG THÁI 3: KHÁM PHÁ / TUẦN TRA
+                current_state = 3
+                
+                # ---> Truyền thêm step_number vào đây <---
+                target_pos, explore_path = self._find_best_frontier(my_position)
+                
+                if target_pos is None:
+                    if self.patrol_target is None or my_position == self.patrol_target:
+                        empty_cells = np.argwhere(self.internal_map == 0)
+                        if len(empty_cells) > 0:
+                            idx = random.randint(0, len(empty_cells) - 1)
+                            self.patrol_target = (empty_cells[idx][0], empty_cells[idx][1])
+                    
+                    target_pos = self.patrol_target
+                    _, explore_path = self._bfs_to_target(my_position, target_pos)
+
                 self.lock_counter = 0
                 self.locked_target = None
 
-            # Sử dụng A* để tìm đường đến target_pos
+            # Tìm đường đi đến target_pos
             path = []
             if target_pos is not None:
-                path = pacmanAlgorithm.astar(my_position, target_pos, self.internal_map)
-                
-                # Fallback: Nếu đường chặn ngã tư bị kẹt, quay lại đuổi thẳng mặt
-                if not path and is_chasing and target_pos != enemy_position:
-                    target_pos = enemy_position
-                    self.lock_counter = 0
-                    self.locked_target = None
-                    path = pacmanAlgorithm.astar(my_position, enemy_position, self.internal_map)
+                if current_state == 3:
+                    # Đang khám phá/tuần tra -> Dùng luôn đường đi của BFS
+                    path = explore_path
+                else:
+                    # Đang rượt Ghost -> Dùng A*
+                    path = pacmanAlgorithm.astar(my_position, target_pos, self.internal_map)
+                    
+                    if not path and current_state == 1 and target_pos != enemy_position:
+                        target_pos = enemy_position
+                        self.lock_counter = 0
+                        self.locked_target = None
+                        path = pacmanAlgorithm.astar(my_position, enemy_position, self.internal_map)
 
+                    # BFS khi A* bị kẹt hoặc để tuần tra
+                    if not path and target_pos != my_position:
+                        _, path = self._bfs_to_target(my_position, target_pos)
+
+            # Hành động theo đường đi tìm được
             if path:
                 best_move = path[0]
-                
-                # Đếm số bước đi thẳng liên tiếp trên path
                 consecutive_steps = 1
                 for i in range(1, len(path)):
                     if path[i] == best_move:
@@ -148,8 +189,9 @@ class PacmanAgent(BasePacmanAgent):
                 if steps > 0:
                     return (best_move, steps)
                     
-            # Fallback cuối cùng nếu A* không tìm được đường
+            # Fallback cuối cùng
             fallback_moves = [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]
+            random.shuffle(fallback_moves) # --- FIX PING-PONG: Lắc xí ngầu hướng đi ---
             for move in fallback_moves:
                 if self._is_valid_move(my_position, move, self.internal_map):
                     return (move, 1)
@@ -165,6 +207,43 @@ class PacmanAgent(BasePacmanAgent):
     def _update_memory(self, map_state: np.ndarray):
         """Cập nhật bộ nhớ siêu tốc bằng np.where"""
         self.internal_map = np.where(map_state != -1, map_state, self.internal_map)
+
+    def _predict_ghost_target(self, start_pos, ghost_dir, map_state, predict_steps=3):
+        """
+        Giả lập đường chạy của Ghost.
+        Phóng 1 điểm ảo di chuyển theo ghost_dir. Nếu đụng tường thì tự động bẻ lái.
+        """
+        if ghost_dir is None:
+            return start_pos
+            
+        curr_pos = start_pos
+        curr_dir = ghost_dir
+        
+        for _ in range(predict_steps):
+            next_pos = (curr_pos[0] + curr_dir[0], curr_pos[1] + curr_dir[1])
+            
+            # Nếu phía trước là đường trống -> đi tiếp
+            if self._is_valid_position(next_pos, map_state):
+                curr_pos = next_pos
+            else:
+                # Nếu đụng tường -> Tìm ngã rẽ (tuyệt đối không quay đầu)
+                opposite_dir = (-curr_dir[0], -curr_dir[1])
+                valid_turns = []
+                
+                for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+                    if move.value != opposite_dir:
+                        test_pos = (curr_pos[0] + move.value[0], curr_pos[1] + move.value[1])
+                        if self._is_valid_position(test_pos, map_state):
+                            valid_turns.append((test_pos, move.value))
+                
+                if valid_turns:
+                    # Giả định Ghost rẽ vào ngã rẽ hợp lệ đầu tiên
+                    curr_pos, curr_dir = valid_turns[0]
+                else:
+                    # Ngõ cụt, Ghost phải dừng lại
+                    break
+                    
+        return curr_pos
 
     def _get_forward_choke_point(self, ghost_pos, ghost_dir, map_state):
         """Phóng tia Raycast tìm ngã tư chặn đầu Ghost"""
@@ -184,16 +263,21 @@ class PacmanAgent(BasePacmanAgent):
             curr_pos = next_pos
         return curr_pos
 
-    def _find_closest_frontier(self, my_pos):
-        """Dùng BFS tìm ô sáng sát cạnh ô sương mù (-1) gần nhất"""
+    def _find_best_frontier(self, my_pos):
+        """
+        HEURISTIC FRONTIER SEARCH: Chiến thuật càn quét cho Map cố định.
+        Gom tất cả vùng biên và chấm điểm để ép Pacman 'Rush' lên nửa trên bản đồ.
+        """
         queue = deque([(my_pos, [])])
         visited = {my_pos}
         height, width = self.internal_map.shape
         
+        frontiers = [] # Danh sách chứa TẤT CẢ các vùng sương mù tìm được
+        
+        # 1. QUÉT BFS TOÀN BỘ VÙNG SÁNG (Rất nhanh vì chỉ có vài chục/trăm ô 0)
         while queue:
             curr_pos, path = queue.popleft()
             
-            # Kiểm tra xem có giáp vùng tối (-1) không
             is_frontier = False
             for dr, dc in [(-1,0), (1,0), (0,-1), (0,1)]:
                 nr, nc = curr_pos[0] + dr, curr_pos[1] + dc
@@ -203,7 +287,59 @@ class PacmanAgent(BasePacmanAgent):
                         break
                         
             if is_frontier:
-                return curr_pos
+                frontiers.append((curr_pos, path))
+            else:
+                for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
+                    dr, dc = move.value
+                    next_pos = (curr_pos[0] + dr, curr_pos[1] + dc)
+                    if self._is_valid_position(next_pos, self.internal_map) and next_pos not in visited:
+                        visited.add(next_pos)
+                        queue.append((next_pos, path + [move]))
+                        
+        if not frontiers:
+            return None, []
+            
+        # 2. CHẤM ĐIỂM (HEURISTIC SCORING) ĐỂ TÌM VÙNG BIÊN NGON NHẤT
+        best_frontier_pos = None
+        best_frontier_path = []
+        best_score = -float('inf')
+        
+        for f_pos, f_path in frontiers:
+            score = 0
+            
+            # Tiêu chí 1: Khoảng cách (Trừ 1.5 điểm cho mỗi bước đi)
+            # Giữ cho Pacman không chạy đi chạy lại giữa 2 đầu bản đồ
+            score -= len(f_path) * 1.5 
+            
+            # Tiêu chí 2: Trọng lực phía Bắc (Cộng 3 điểm cho mỗi hàng nhích lên trên)
+            # Row 0 là đỉnh map. Càng gần đỉnh, điểm cộng càng khổng lồ.   
+            # Ghost thường spawn ở phía trên, đây là đòn 'Rush Top' chí mạng.
+            score += (21 - f_pos[0]) * 3
+            
+            # Tiêu chí 3: Kiểm soát Trung tuyến (Cộng 8 điểm)
+            # Nếu sương mù nằm ở khu vực giữa map (cột 6 đến 14) -> Ưu tiên quét để chiếm tầm nhìn
+            if 6 <= f_pos[1] <= 14:
+                score += 8
+                
+            # Đưa chút ngẫu nhiên nhỏ để tránh thiên kiến khi 2 ô bằng điểm
+            score += random.random()
+                
+            if score > best_score:
+                best_score = score
+                best_frontier_pos = f_pos
+                best_frontier_path = f_path
+                
+        return best_frontier_pos, best_frontier_path
+    
+    def _bfs_to_target(self, start, target):
+        """Dùng BFS để tìm đường đi an toàn khi A* bị kẹt hoặc dùng để Tuần tra"""
+        queue = deque([(start, [])])
+        visited = {start}
+        
+        while queue:
+            curr_pos, path = queue.popleft()
+            if curr_pos == target:
+                return curr_pos, path
                 
             for move in [Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT]:
                 dr, dc = move.value
@@ -211,7 +347,7 @@ class PacmanAgent(BasePacmanAgent):
                 if self._is_valid_position(next_pos, self.internal_map) and next_pos not in visited:
                     visited.add(next_pos)
                     queue.append((next_pos, path + [move]))
-        return None
+        return None, []
     
     # Default Helper methods (you can add more)
     
