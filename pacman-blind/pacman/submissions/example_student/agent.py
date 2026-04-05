@@ -52,6 +52,8 @@ class PacmanAgent(BasePacmanAgent):
 
         # Chạy khi hết sương mù
         self.patrol_target = None
+
+        self.heatmap = np.zeros((21, 21), dtype=int)
     
     def step(self, map_state: np.ndarray, 
              my_position: tuple, 
@@ -102,7 +104,7 @@ class PacmanAgent(BasePacmanAgent):
                 target_pos = enemy_position
                 
                 # Bật Dồn góc sớm từ step 15
-                if step_number > 1 and self.last_ghost_dir is not None:
+                if step_number > 15 and self.last_ghost_dir is not None:
                     if self.lock_counter > 0 and self.locked_target is not None:
                         target_pos = self.locked_target
                         self.lock_counter -= 1
@@ -141,11 +143,24 @@ class PacmanAgent(BasePacmanAgent):
                 target_pos, explore_path = self._find_best_frontier(my_position)
                 
                 if target_pos is None:
-                    if self.patrol_target is None or my_position == self.patrol_target:
-                        empty_cells = np.argwhere(self.internal_map == 0)
-                        if len(empty_cells) > 0:
-                            idx = random.randint(0, len(empty_cells) - 1)
-                            self.patrol_target = (empty_cells[idx][0], empty_cells[idx][1])
+                    # Cần tìm điểm mới nếu: Chưa có điểm, đã đến nơi, hoặc điểm tuần tra đã lọt vào tầm nhìn (bị làm nguội về 0)
+                    if (self.patrol_target is None or 
+                        my_position == self.patrol_target or 
+                        self.heatmap[self.patrol_target[0], self.patrol_target[1]] == 0):
+                        
+                        # Chỉ xét những ô là đường đi (0)
+                        valid_cells_mask = (self.internal_map == 0)
+                        
+                        if np.any(valid_cells_mask):
+                            # Tìm mức nhiệt độ cao nhất trên bản đồ
+                            max_heat = np.max(self.heatmap[valid_cells_mask])
+                            
+                            # Lấy ra TẤT CẢ các tọa độ đang đạt mức nhiệt cao nhất đó
+                            hottest_cells = np.argwhere((self.heatmap == max_heat) & valid_cells_mask)
+                            
+                            # Chọn ngẫu nhiên 1 ô trong số các ô nóng nhất để làm mục tiêu
+                            idx = random.randint(0, len(hottest_cells) - 1)
+                            self.patrol_target = (hottest_cells[idx][0], hottest_cells[idx][1])
                     
                     target_pos = self.patrol_target
                     _, explore_path = self._bfs_to_target(my_position, target_pos)
@@ -205,8 +220,15 @@ class PacmanAgent(BasePacmanAgent):
     # Helper methods
     
     def _update_memory(self, map_state: np.ndarray):
-        """Cập nhật bộ nhớ siêu tốc bằng np.where"""
+        """Cập nhật bộ nhớ và Bản đồ nhiệt (Heatmap)"""
+        # 1. Cập nhật bản đồ sương mù
         self.internal_map = np.where(map_state != -1, map_state, self.internal_map)
+        
+        # 2. Tăng nhiệt độ (độ cũ) của toàn bộ bản đồ lên 1 (Nơi nào càng lâu không nhìn thấy càng nóng)
+        self.heatmap += 1
+        
+        # 3. Làm nguội (reset về 0) những ô đang nằm trong tầm nhìn (khác -1)
+        self.heatmap = np.where(map_state != -1, 0, self.heatmap)
 
     def _predict_ghost_target(self, start_pos, ghost_dir, map_state, predict_steps=3):
         """
@@ -384,7 +406,6 @@ class PacmanAgent(BasePacmanAgent):
             return False
         
         return map_state[row, col] == 0
-
 
 class GhostAgent(BaseGhostAgent):
     """
